@@ -1,0 +1,73 @@
+---
+title: "p8105_hw5_ar4173"
+author: "Anand Rajan"
+date: "11/18/2021"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Problem 2
+
+Calling in the Data files into a data frame
+
+```{r}
+data_files_df =
+  tibble(list.files("./data")) %>% 
+  mutate(file_list = paste(list.files("./data")))
+
+
+data_files_df
+```
+
+Creating a function to read the files in new dataframe
+```{r}
+read_files = function(x) {
+  
+  data = read_csv(paste0("./data/",x)) %>% 
+    mutate(file_names = x)
+  
+}
+
+study_data = map_df(data_files_df$file_list, read_files)
+```
+
+Tidying Dataset
+```{r}
+tidy_data = 
+  study_data %>% 
+  gather(key=week, value = arm_value, week_1:week_8)%>% 
+   separate(
+    col = file_names,
+    into= c("arm","id"),
+    sep = "_"
+  )  %>% 
+  mutate(
+    arm = recode(
+      arm,
+      "con" = "control",
+      "exp" = "experimental"
+    ),
+    id=substr(id,start=1, stop=2)
+  ) 
+
+```
+
+Spaghetti Plot
+
+```{r}
+ggplot(data = tidy_data, aes(x=week, y=arm_value, group=id)) +geom_line(aes(color=id)) + geom_point() + facet_grid(. ~ arm) +
+  labs(
+    title= "Arm values over Time",
+      x= "Week",
+      y= "Arm Value"
+    )
+
+```
+
+
+
