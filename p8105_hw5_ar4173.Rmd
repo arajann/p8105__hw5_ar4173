@@ -10,6 +10,100 @@ library(tidyverse)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+## Problem 1
+
+```{r message=FALSE}
+homicide_df=
+  read_csv("./data-homicides/homicide-data.csv", na=c("", "Unknown")) %>% 
+  mutate(
+    city_state = str_c(city,state),
+    resolution = case_when(
+      disposition == "Closed without arrest" ~ "unsolved",
+      disposition == "Open/No arrest" ~ "unsolved",
+      disposition == "Closed by arrest" ~ "solved"
+    )
+  ) %>% 
+  relocate(city_state) %>% 
+  filter(city_state != "TulsaAL")
+```
+
+Focus on Baltimore, MD 
+
+```{r}
+baltimore_df =
+  homicide_df %>% 
+  filter(city_state == "BaltimoreMD")
+
+baltimore_summary = 
+baltimore_df %>% 
+  summarize(
+    unsolved = sum(resolution == "unsolved"),
+    n = n()
+  )
+
+baltimore_test =
+  prop.test(
+    x = baltimore_summary %>% pull(unsolved),
+    n = baltimore_summary %>%  pull(n))
+
+baltimore_test %>% 
+  broom::tidy()
+
+```
+
+Iterate across cities!
+
+```{r}
+prop_test_function = function(city_df) {
+  
+  city_summary = 
+      city_df %>% 
+      summarize(
+        unsolved = sum(resolution == "unsolved"),
+        n = n()
+      )
+
+  city_test =
+      prop.test(
+        x = city_summary %>% pull(unsolved),
+        n = city_summary %>%  pull(n))
+  
+  return(city_test)
+  
+}
+
+prop_test_function(baltimore_df)
+
+homicide_df %>% 
+  filter(city_state == "AlbuquerqueNM") %>% 
+  prop_test_function()
+```
+
+Iterate across all cities
+
+```{r}
+results_df =
+  homicide_df %>% 
+  nest(data = uid:resolution) %>% 
+  mutate(
+    test_results = map(data, prop_test_function),
+    tidy_results = map(test_results, broom::tidy)
+  ) %>%  
+  select(city_state, tidy_results) %>% 
+  unnest(tidy_results) %>% 
+  select(city_state, estimate, starts_with("conf"))
+```
+
+Plot
+
+```{r}
+results_df %>% 
+  mutate(city_state = fct_reorder(city_state, estimate)) %>% 
+  ggplot(aes(x=city_state, y=estimate)) + 
+  geom_point() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
 
 ## Problem 2
 
@@ -18,17 +112,21 @@ Calling in the Data files into a data frame
 ```{r}
 data_files_df =
   tibble(list.files("./data")) %>% 
-  mutate(file_list = paste(list.files("./data")))
+  mutate(
+    file_list = paste(list.files("./data"))
+  )
 
 
 data_files_df
 ```
 
-Creating a function to read the files in new dataframe
-```{r}
+Creating a function to read the files in new data frame
+
+```{r message=FALSE}
 read_files = function(x) {
   
-  data = read_csv(paste0("./data/",x)) %>% 
+  data = 
+    read_csv(paste0("./data/",x)) %>% 
     mutate(file_names = x)
   
 }
@@ -36,7 +134,8 @@ read_files = function(x) {
 study_data = map_df(data_files_df$file_list, read_files)
 ```
 
-Tidying Dataset
+Tidying the Longitudinal Study Dataset
+
 ```{r}
 tidy_data = 
   study_data %>% 
@@ -52,22 +151,78 @@ tidy_data =
       "con" = "control",
       "exp" = "experimental"
     ),
-    id=substr(id,start=1, stop=2)
+    id=substr(id,start=1, stop=2), 
+    week = str_replace(week,"week_","")
   ) 
 
+tidy_data
 ```
 
 Spaghetti Plot
 
 ```{r}
-ggplot(data = tidy_data, aes(x=week, y=arm_value, group=id)) +geom_line(aes(color=id)) + geom_point() + facet_grid(. ~ arm) +
+ggplot(
+  data = tidy_data, aes(x=week, y=arm_value, group=id))+
+  geom_line(aes(color=id)) + 
+  geom_point(size=0.3) + 
+  facet_grid(. ~ arm) +
   labs(
-    title= "Arm values over Time",
+    title= "Arm Values over Time",
       x= "Week",
       y= "Arm Value"
     )
 
 ```
+
+The first major difference is that for participants in the experimental arm, the arm value generally increased over time. On the other hand, for participants in the control arm, there is not such a noticeable trend across time. Secondly, the range of the arm values for the experimental group is much larger as opposed to the control group. 
+
+## Problem 3
+
+Importing Data
+
+```{r}
+set.seed(10)
+
+iris_with_missing = iris %>% 
+  map_df(~replace(.x, sample(1:150, 20), NA)) %>%
+  mutate(Species = as.character(Species))
+```
+
+Creating function for replacing missing for numeric and character variables
+
+```{r}
+
+replace_missing = function(x) {
+  
+  if (is.character(x)) {
+    
+    x[is.na(x)] = "Viriginica"
+    
+  } else if (is.numeric(x)) {
+    
+    x[is.na(x)] = mean(x, na.rm=TRUE)
+    
+  } else stop("Input must be either character or numeric")
+  
+  return(x)
+  
+}
+
+```
+
+Running a for loop to call in function to replace missing values in the iris dataset
+
+```{r}
+
+for(i in 1:5) {
+  
+  iris_with_missing[i] = map(iris_with_missing[i], ~replace_missing(.x))
+  
+}
+
+iris_with_missing
+```
+
 
 
 
