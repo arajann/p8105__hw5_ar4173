@@ -161,6 +161,7 @@ tidy_data
 Spaghetti Plot
 
 ```{r}
+spaghetti_plot =
 ggplot(
   data = tidy_data, aes(x=week, y=arm_value, group=id))+
   geom_line(aes(color=id)) + 
@@ -171,6 +172,8 @@ ggplot(
       x= "Week",
       y= "Arm Value"
     )
+
+spaghetti_plot
 
 ```
 
